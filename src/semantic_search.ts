@@ -44,6 +44,10 @@ export const generateAndStoreEmbeddings = async ({
     }
 
     console.info(`Generating embeddings for [${linktext}]...`);
+    // Get the correct client based on the provider ID stored in settings
+    const providerId = (app as any).plugins.plugins['zettelkasten-llm-tools']?.settings?.embeddingsModelProviderId;
+    // We need access to the plugin instance to call getOpenAIClient, but here we only have openaiClient instance
+    // However, generateAndStoreEmbeddings is called from main.ts where we can pass the correct client
     const embedding = await openaiClient.generateOpenAiEmbeddings([filteredLines]);
     vectorStore.saveVector({ linktext, embedding, sha, path });
   };

@@ -95,15 +95,51 @@ const CopilotTabContent: React.FC<{ plugin: ZettelkastenLLMToolsPlugin, app: App
   }, [activeFile, app.workspace]);
 
   useEffect(() => {
-    setAvailableModels(availableChatModels(
-      plugin.settings.openaiAPIKey,
-      plugin.settings.anthropicAPIKey
-    ));
-  }, [plugin.settings.openaiAPIKey, plugin.settings.anthropicAPIKey]);
+    const updateModels = () => {
+      setAvailableModels(availableChatModels(
+        plugin.settings.openaiAPIKey,
+        plugin.settings.anthropicAPIKey,
+        plugin.settings.customChatModels,
+        plugin.settings.providerModels
+      ));
+    };
 
-  const isModelAvailable = availableModels.some(model =>
-    model.name === plugin.settings.copilotModel && model.available
-  );
+    updateModels();
+
+    plugin.on('zettelkasten-llm-tools:api-keys-updated', updateModels);
+
+    return () => {
+      plugin.off('zettelkasten-llm-tools:api-keys-updated', updateModels);
+    };
+  }, [plugin]);
+
+  // Helper to parse model value in new format (providerId:modelName)
+  const parseModelValue = (value: string): { providerId: string; modelName: string } => {
+    const colonIndex = value.indexOf(':');
+    if (colonIndex === -1) {
+      // Old format - just model name, default to openai
+      return { providerId: 'openai', modelName: value };
+    }
+    return {
+      providerId: value.substring(0, colonIndex),
+      modelName: value.substring(colonIndex + 1)
+    };
+  };
+
+  // Parse the current copilot model setting
+  const { providerId: currentProviderId, modelName: currentModelName } = parseModelValue(plugin.settings.copilotModel);
+
+  // Check if model is available - match by both providerId and modelName for new format,
+  // or just modelName for old format (migration case)
+  const isModelAvailable = availableModels.some(model => {
+    if (plugin.settings.copilotModel.includes(':')) {
+      // New format: match both providerId and modelName
+      return model.providerId === currentProviderId && model.name === currentModelName && model.available;
+    } else {
+      // Old format: match just modelName
+      return model.name === currentModelName && model.available;
+    }
+  });
 
   const populateCopilotSuggest = async () => {
     if (!activeFile) {
@@ -125,23 +161,36 @@ const CopilotTabContent: React.FC<{ plugin: ZettelkastenLLMToolsPlugin, app: App
         content: `<note>\n# ${activeFileTitle}\n${activeFileText}</note>${tagsMessage}`
       };
 
-      const selectedModel = plugin.settings.copilotModel;
+      // Parse the model value to get providerId and modelName
+      const { providerId, modelName } = parseModelValue(plugin.settings.copilotModel);
+      
+      // Find the model in availableModels using both providerId and modelName
+      const selectedModel = availableModels.find(m => 
+        m.providerId === providerId && m.name === modelName
+      ) || availableModels.find(m => m.name === modelName); // Fallback for old format
+      
       let response;
 
-      if (selectedModel.startsWith('gpt')) {
-        response = await plugin.openaiClient.createMessage(
-          system_prompt,
-          [userMessage],
-          selectedModel
-        );
-        setResponse(response);
-      } else {
+      // Determine if this is an Anthropic model - either from selectedModel or from providerId
+      const isAnthropicModel = selectedModel?.provider === 'anthropic' || providerId === 'anthropic';
+
+      if (isAnthropicModel) {
+        // Use Anthropic client for Anthropic models
         const msg = await plugin.anthropicClient.createMessage(
           system_prompt,
           [userMessage],
-          selectedModel
+          modelName
         );
         setResponse(msg.content[0].type === 'text' ? msg.content[0].text : JSON.stringify(msg.content[0]));
+      } else {
+        // OpenAI or compatible provider
+        const client = plugin.getOpenAIClient(providerId);
+        response = await client.createMessage(
+          system_prompt,
+          [userMessage],
+          modelName
+        );
+        setResponse(response);
       }
     } catch (error) {
       console.error('Error calling LLM API:', error);

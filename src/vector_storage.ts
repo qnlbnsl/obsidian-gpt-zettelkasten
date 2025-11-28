@@ -76,7 +76,9 @@ export class VectorStore {
 
   async upsertVector(file: TFile): Promise<StoredVector> {
     const { linktext } = this.plugin.linkTextForFile(file);
-    const { openaiClient } = this.plugin;
+    const providerId = this.plugin.settings.embeddingsModelProviderId;
+    const openaiClient = this.plugin.getOpenAIClient(providerId);
+    
     const filteredLines = await this.plugin.app.vault.cachedRead(file);
     if (filteredLines.length === 0) {
       throw new Error("Error extracting text for [[" + linktext + "]]");
