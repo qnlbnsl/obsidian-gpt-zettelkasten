@@ -1167,6 +1167,7 @@ class ZettelkastenLLMToolsPluginSettingTab extends PluginSettingTab {
         this.plugin.settings.customEmbeddingModels[i].name = nameInput.value;
         await this.plugin.saveSettings();
         this.plugin.trigger('zettelkasten-llm-tools:api-keys-updated');
+        this.display();
       };
 
       const displayNameInput = modelRow.createEl('input', { type: 'text', placeholder: 'Display name' });
@@ -1176,6 +1177,7 @@ class ZettelkastenLLMToolsPluginSettingTab extends PluginSettingTab {
         this.plugin.settings.customEmbeddingModels[i].displayName = displayNameInput.value;
         await this.plugin.saveSettings();
         this.plugin.trigger('zettelkasten-llm-tools:api-keys-updated');
+        this.display();
       };
 
       const deleteButton = modelRow.createEl('button', { text: '✕' });
